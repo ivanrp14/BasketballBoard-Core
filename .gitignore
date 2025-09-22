@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.env
+env/
+venv/
+*.sqlite3
+
+# VSCode
+.vscode/
+
+# Docker
+docker-compose.override.yml
+*.log
+
+# Logs
+*.log
+*.out
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python packaging
+*.egg-info/
+dist/
+build/
+
+# IDEs
+.idea/
+
+# API local files
+api/__pycache__/
+api/*.pyc
+api/.env
+
+# Test outputs
+*.coverage
+.coverage.*
+htmlcov/
+.tox/

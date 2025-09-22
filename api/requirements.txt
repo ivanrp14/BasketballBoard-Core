@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+asyncpg
+motor
+pydantic
+bcrypt
+python-jose
+python-dotenv
