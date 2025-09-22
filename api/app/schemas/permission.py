@@ -7,8 +7,9 @@ class PermissionCreate(PermissionBase):
     user_id: int
 
 class PermissionOut(PermissionBase):
-    id: int
-    user_id: int
-    team_id: int
+    username: str
+    team_name: str
+    team_color: str
+    role: str
     class Config:
         orm_mode = True

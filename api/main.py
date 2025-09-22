@@ -21,9 +21,9 @@ async def shutdown():
 
 
 # Include routes
-app.include_router(auth, prefix="/auth", tags=["Auth"])
-app.include_router(teams, prefix="/teams", tags=["Teams"])
-app.include_router(plays, prefix="/plays", tags=["Plays"])
+app.include_router(auth, tags=["Auth"])
+app.include_router(teams, tags=["Teams"])
+app.include_router(plays, tags=["Plays"])
 
 @app.get("/")
 async def root():

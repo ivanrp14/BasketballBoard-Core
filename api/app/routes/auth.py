@@ -73,3 +73,4 @@ async def delete_all_users(
     await db_sess.execute(delete(models.User))
     await db_sess.commit()
     return None
+
