@@ -33,3 +33,13 @@ Construida con **FastAPI**, utiliza **PostgreSQL** para usuarios, equipos y perm
 ---
 
 ## 📂 Estructura del proyecto
+app/
+│── api/ # Endpoints (routers)
+│── models/ # Modelos SQLAlchemy
+│── schemas/ # Modelos Pydantic
+│── services/ # Lógica de negocio
+│── db.py # Conexión a Postgres
+│── mongo.py # Conexión a MongoDB
+│── main.py # Punto de entrada FastAPI
+
+
