@@ -13,9 +13,7 @@ class Team(Base):
     name = Column(String, nullable=False)
     color = Column(String, nullable=False)
     invitation_code = Column(String, unique=True, nullable=False)
-    owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), unique=True)
 
     # Relaciones
-    owner = relationship("User", back_populates="team")
     plays = relationship("Play", back_populates="team")
     permissions = relationship("Permission", back_populates="team")

@@ -25,7 +25,7 @@ services:
 
   api:
     build: ./api
-    container_name: pizarra_api
+    container_name: api
     restart: always
     depends_on:
       - postgres

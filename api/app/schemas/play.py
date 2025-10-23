@@ -1,18 +1,24 @@
-from typing import Any, Dict, Optional
+# schemas/plays.py
 from pydantic import BaseModel
 from datetime import datetime
+from typing import Any
 
-class PlayCreate(BaseModel):
+class PlayBase(BaseModel):
     name: str
-    data: Dict[str, Any]  # contenido de la jugada (irá a Mongo)
 
+class PlayCreate(PlayBase):
+    data: Any  # JSON que viene de Unity
 
-class PlayOut(BaseModel):
-    id: int
+class PlayCreateRequest(BaseModel):
     team_id: int
     name: str
+    data: str
+
+class PlayOut(PlayBase):
+    id: int
+    team_id: int
     created_at: datetime
-    data: Optional[Dict[str, Any]]  # se incluirá al traer desde Mongo
+    data: Any
 
     class Config:
         orm_mode = True

@@ -13,8 +13,4 @@ class User(Base):
     password_hash = Column(String, nullable=False)
 
     # Relaciones
-    team = relationship("Team", back_populates="owner", uselist=False)  # un usuario = un equipo
     permissions = relationship("Permission", back_populates="user")
-
-
-    

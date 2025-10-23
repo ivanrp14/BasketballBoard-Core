@@ -15,7 +15,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 # 👉 Registro de usuario
-@router.post("/register", response_model=schemas.UserOut)
+@router.post("/register", response_model=schemas.Token)
 async def register(user: schemas.UserCreate, db_sess: AsyncSession = Depends(db.get_db)):
     # Verificar si ya existe por email
     result = await db_sess.execute(select(models.User).filter(models.User.email == user.email))
@@ -31,14 +31,16 @@ async def register(user: schemas.UserCreate, db_sess: AsyncSession = Depends(db.
             raise HTTPException(status_code=400, detail="Username already taken")
 
     new_user = models.User(
-        email=user.email,
-        username=user.username,
+        email=user.email.lower(),
+        username=user.username.lower(),
         password_hash=get_password_hash(user.password),
     )
     db_sess.add(new_user)
     await db_sess.commit()
     await db_sess.refresh(new_user)
-    return new_user
+
+    access_token = create_access_token(data={"sub": new_user.email})
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
 
@@ -49,7 +51,8 @@ async def login(form_data: schemas.UserLogin, db_sess: AsyncSession = Depends(db
             or_(models.User.username == form_data.username, models.User.email == form_data.username)
         )
     )
-    user = result.scalar_one_or_none()
+    user = result.scalars().first()
+
     if not user or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 

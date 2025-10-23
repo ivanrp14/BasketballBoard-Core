@@ -1,31 +1,164 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from app import models, schemas, db
-from app.routes.auth import get_current_user
+from app.schemas.play import PlayCreateRequest
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from bson import ObjectId
+from typing import List
 
-router = APIRouter(prefix="/plays", tags=["Plays"])
+from app import models, db
+from app.core import get_current_user
+import json
+from app.db.mongo import get_mongo_client
 
-@router.post("/{team_id}", response_model=schemas.PlayOut)
-def create_play(team_id: int, play: schemas.PlayCreate, db_sess: Session = Depends(db.get_db), current_user: models.User = Depends(get_current_user)):
-    # check permissions
-    perm = db_sess.query(models.Permission).filter_by(user_id=current_user.id, team_id=team_id).first()
-    if not perm or perm.role not in ["admin", "editor"]:
-        raise HTTPException(status_code=403, detail="Not allowed")
+router = APIRouter(prefix="/plays")
 
-    # limit 30 plays
-    count = db_sess.query(models.Play).filter(models.Play.team_id == team_id).count()
-    if count >= 30:
-        raise HTTPException(status_code=400, detail="Team already has max 30 plays")
+def get_plays_collection():
+    mongo_db = get_mongo_client()
+    return mongo_db["plays_data"]
 
-    new_play = models.Play(team_id=team_id, name=play.name)
+# 🔹 Middleware/función de permisos
+async def check_user_role(user: models.User, team_id: int, db_sess: AsyncSession, allowed_roles: List[str]):
+    result = await db_sess.execute(
+        select(models.Permission).filter_by(user_id=user.id, team_id=team_id)
+    )
+    perm = result.scalar_one_or_none()
+    if not perm or perm.role not in allowed_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permisos suficientes para esta acción"
+        )
+    return perm
+
+# 📌 Crear jugada
+@router.post("/", status_code=201)
+async def create_play(
+    request: PlayCreateRequest,
+    current_user: models.User = Depends(get_current_user),
+    db_sess: AsyncSession = Depends(db.get_db)
+):
+    await check_user_role(current_user, request.team_id, db_sess, ["admin", "editor"])
+
+    new_play = models.Play(team_id=request.team_id, name=request.name)
     db_sess.add(new_play)
-    db_sess.commit()
-    db_sess.refresh(new_play)
-    return new_play
+    await db_sess.commit()
+    await db_sess.refresh(new_play)
 
-@router.get("/{team_id}", response_model=list[schemas.PlayOut])
-def list_plays(team_id: int, db_sess: Session = Depends(db.get_db), current_user: models.User = Depends(get_current_user)):
-    perm = db_sess.query(models.Permission).filter_by(user_id=current_user.id, team_id=team_id).first()
-    if not perm:
-        raise HTTPException(status_code=403, detail="Not allowed")
-    return db_sess.query(models.Play).filter_by(team_id=team_id).all()
+    plays_collection = get_plays_collection()
+    try:
+        data_dict = json.loads(request.data)  # convertir string JSON a dict
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"JSON inválido: {e}")
+
+    await plays_collection.insert_one({
+        "play_id": new_play.id,
+        "data": data_dict  # ahora se guarda como objeto
+    })
+
+    return {
+        "id": new_play.id,
+        "team_id": request.team_id,
+        "name": request.name,
+        "created_at": new_play.created_at
+    }
+
+# 📌 Actualizar jugada
+@router.put("/{play_id}")
+async def update_play(
+    play_id: int,
+    name: str = None,
+    data: str = None,  # string JSON desde Unity
+    current_user: models.User = Depends(get_current_user),
+    db_sess: AsyncSession = Depends(db.get_db)
+):
+    result = await db_sess.execute(select(models.Play).filter_by(id=play_id))
+    play = result.scalar_one_or_none()
+    if not play:
+        raise HTTPException(status_code=404, detail="Jugada no encontrada")
+
+    await check_user_role(current_user, play.team_id, db_sess, ["admin", "editor"])
+
+    if name:
+        play.name = name
+    db_sess.add(play)
+    await db_sess.commit()
+
+    if data:
+        try:
+            data_dict = json.loads(data)
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail=f"JSON inválido: {e}")
+
+        plays_collection = get_plays_collection()
+        await plays_collection.update_one(
+            {"play_id": play.id},
+            {"$set": {"data": data_dict}},
+            upsert=True
+        )
+
+    return {"id": play.id, "name": play.name, "team_id": play.team_id}
+
+
+@router.get("/{team_id}")
+async def list_team_play_names(
+    team_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db_sess: AsyncSession = Depends(db.get_db)
+):
+    # validar que el usuario es parte del equipo
+    await check_user_role(current_user, team_id, db_sess, ["admin", "editor", "viewer"])
+
+    result = await db_sess.execute(select(models.Play).filter_by(team_id=team_id))
+    plays = result.scalars().all()
+
+    return [{"id": play.id, "name": play.name, "created_at": play.created_at} for play in plays]
+@router.get("/{play_id}/data")
+async def get_play_data(
+    play_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db_sess: AsyncSession = Depends(db.get_db)
+):
+    # buscar jugada en Postgres
+    result = await db_sess.execute(select(models.Play).filter_by(id=play_id))
+    play = result.scalar_one_or_none()
+    if not play:
+        raise HTTPException(status_code=404, detail="Jugada no encontrada")
+
+    # validar rol
+    await check_user_role(current_user, play.team_id, db_sess, ["admin", "editor", "viewer"])
+
+    # obtener data de mongo
+    plays_collection = get_plays_collection()
+    mongo_doc = await plays_collection.find_one({"play_id": play.id})
+
+    return {
+        "id": play.id,
+        "name": play.name,
+        "team_id": play.team_id,
+        "created_at": play.created_at,
+        "data": mongo_doc["data"] if mongo_doc else None
+    }
+
+# 📌 Eliminar jugada
+@router.delete("/{play_id}", status_code=204)
+async def delete_play(
+    play_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db_sess: AsyncSession = Depends(db.get_db)
+):
+    result = await db_sess.execute(select(models.Play).filter_by(id=play_id))
+    play = result.scalar_one_or_none()
+    if not play:
+        raise HTTPException(status_code=404, detail="Jugada no encontrada")
+
+    # validar rol
+    await check_user_role(current_user, play.team_id, db_sess, ["admin", "editor"])
+
+    # eliminar en Postgres
+    await db_sess.delete(play)
+    await db_sess.commit()
+
+    # eliminar en Mongo
+    plays_collection = get_plays_collection()
+    await plays_collection.delete_one({"play_id": play.id})
+
+    return {"detail": "Jugada eliminada"}
