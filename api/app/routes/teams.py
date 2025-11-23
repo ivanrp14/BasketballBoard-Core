@@ -21,8 +21,8 @@ async def create_team(
     existing_permissions = result.scalars().all()
 
     # Limite de 3 equipos por usuario
-    if len(existing_permissions) >= 3:
-        raise HTTPException(status_code=409, detail="You already own 3 teams")
+    if len(existing_permissions) >= 10:
+        raise HTTPException(status_code=409, detail="You already own 10 teams")
 
     # Validar que no exista un equipo con el mismo nombre para este usuario
     for perm in existing_permissions:
