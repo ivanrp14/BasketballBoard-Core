@@ -162,3 +162,43 @@ async def delete_play(
     await plays_collection.delete_one({"play_id": play.id})
 
     return {"detail": "Jugada eliminada"}
+@router.get("/{team_id}/full")
+async def get_full_team_plays(
+    team_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db_sess: AsyncSession = Depends(db.get_db)
+):
+    # validar permisos
+    await check_user_role(current_user, team_id, db_sess, ["admin", "editor", "viewer"])
+
+    # obtener jugadas desde Postgres
+    result = await db_sess.execute(select(models.Play).filter_by(team_id=team_id))
+    plays = result.scalars().all()
+
+    if not plays:
+        return []
+
+    # obtener coleccion mongo
+    plays_collection = get_plays_collection()
+
+    # obtener todos los play_id
+    play_ids = [p.id for p in plays]
+
+    # traer documentos desde mongo
+    mongo_docs = await plays_collection.find({"play_id": {"$in": play_ids}}).to_list(length=None)
+
+    # convertir a diccionario por play_id
+    mongo_map = {doc["play_id"]: doc.get("data") for doc in mongo_docs}
+
+    # unir datos
+    full_plays = []
+    for p in plays:
+        full_plays.append({
+            "id": p.id,
+            "team_id": p.team_id,
+            "name": p.name,
+            "created_at": p.created_at,
+            "data": mongo_map.get(p.id)  # None si no existe en mongo
+        })
+
+    return full_plays
