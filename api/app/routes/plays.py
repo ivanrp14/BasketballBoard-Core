@@ -117,25 +117,28 @@ async def get_play_data(
     current_user: models.User = Depends(get_current_user),
     db_sess: AsyncSession = Depends(db.get_db)
 ):
-    # buscar jugada en Postgres
     result = await db_sess.execute(select(models.Play).filter_by(id=play_id))
     play = result.scalar_one_or_none()
     if not play:
         raise HTTPException(status_code=404, detail="Jugada no encontrada")
 
-    # validar rol
     await check_user_role(current_user, play.team_id, db_sess, ["admin", "editor", "viewer"])
 
-    # obtener data de mongo
     plays_collection = get_plays_collection()
     mongo_doc = await plays_collection.find_one({"play_id": play.id})
+
+    data_obj = mongo_doc["data"] if mongo_doc else None
+
+    # 🔥 Convertir dict → string JSON
+    import json
+    data_string = json.dumps(data_obj) if data_obj is not None else ""
 
     return {
         "id": play.id,
         "name": play.name,
         "team_id": play.team_id,
         "created_at": play.created_at,
-        "data": mongo_doc["data"] if mongo_doc else None
+        "data": data_string
     }
 
 # 📌 Eliminar jugada
