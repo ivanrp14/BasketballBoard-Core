@@ -64,31 +64,39 @@ async def get_my_team(
     db_sess: AsyncSession = Depends(db.get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Alias para encontrar al owner
+    # Alias para encontrar SOLO al admin real (dueño del equipo)
     owner_perm = aliased(Permission)
     owner_user = aliased(User)
 
     result = await db_sess.execute(
-        select(Permission, Team, owner_user.username)
+        select(
+            Permission.id,
+            Permission.role,
+            Permission.team_id,
+            Team.name,
+            Team.color,
+            owner_user.username
+        )
         .join(Team, Permission.team_id == Team.id)
         .join(owner_perm, owner_perm.team_id == Team.id)
         .join(owner_user, owner_user.id == owner_perm.user_id)
         .filter(Permission.user_id == current_user.id)
-        
+        .filter(owner_perm.role == "admin")   # 🔥 evita duplicados
     )
-    permissions = result.all()
+
+    rows = result.all()
 
     return [
         schemas.PermissionOut(
-            id=perm.Permission.id,
+            id=row.id,
             username=current_user.username,
-            team_name=perm.Team.name,
-            team_color=perm.Team.color,
-            team_id=perm.Team.id,
-            role=perm.Permission.role,
-            owner=perm.username  # username del admin
+            team_id=row.team_id,
+            team_name=row.name,
+            team_color=row.color,
+            role=row.role,
+            owner=row.username  # Usuario dueño
         )
-        for perm in permissions
+        for row in rows
     ]
 
 # 📌 Unirse a un equipo con invitation_code
