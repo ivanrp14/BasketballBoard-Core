@@ -129,17 +129,15 @@ async def get_play_data(
 
     data_obj = mongo_doc["data"] if mongo_doc else None
 
-    # 🔥 Convertir dict → string JSON
-    import json
-    data_string = json.dumps(data_obj) if data_obj is not None else ""
-
+    # 🔥 Aquí el fix: devolver JSON real, no string
     return {
         "id": play.id,
         "name": play.name,
         "team_id": play.team_id,
         "created_at": play.created_at,
-        "data": data_string
+        "data": data_obj
     }
+
 
 # 📌 Eliminar jugada
 @router.delete("/{play_id}", status_code=204)
