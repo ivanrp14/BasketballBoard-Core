@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.db import postgres, mongo
@@ -11,8 +12,17 @@ load_dotenv()
 print("Environment variables loaded")
 print("POSTGRES_URL:", postgres.DATABASE_URL)
 
+# 👉 Create app
 app = FastAPI(title="Basketball Plays API")
 
+# 👉 CORS (NECESARIO PARA UNITY WEBGL)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 🔴 Cambia a tu dominio en producción
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 👉 Startup / Shutdown
 @app.on_event("startup")
@@ -25,12 +35,10 @@ async def startup():
 async def shutdown():
     await app.state.pg.close()
 
-
-# 👉 Exception handlers para unificar errores
+# 👉 Exception handlers
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     errors = exc.errors()
-    # Concatenar mensajes de error en un string
     messages = "; ".join([err["msg"] for err in errors])
     return JSONResponse(
         status_code=422,
@@ -39,22 +47,18 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-    if isinstance(exc.detail, str):
-        detail = exc.detail
-    else:
-        detail = str(exc.detail)
+    detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": detail}
     )
 
-
-# 👉 Include routes
+# 👉 Routes
 app.include_router(auth, tags=["Auth"])
 app.include_router(teams, tags=["Teams"])
 app.include_router(plays, tags=["Plays"])
 
-
+# 👉 Root
 @app.get("/")
 async def root():
     return {"message": "API running with Postgres and MongoDB!"}
